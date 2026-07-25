@@ -1,0 +1,20 @@
+flowchart TD
+    A["Nhận câu hỏi người dùng"] --> B{"Cần giá, tồn kho hoặc nhiều bước?"}
+    B -- "Không: câu hỏi lý thuyết" --> C["Chatbot baseline: 1 LLM call, 0 tool"]
+    B -- "Có" --> D["Nạp local SQLite memory theo session_id"]
+    D --> E{"Đủ sở thích/nhóm và ngân sách?"}
+    E -- "Không" --> F["Hỏi người dùng bổ sung"]
+    E -- "Có" --> G["ReAct Agent"]
+    G --> H["analyze_personality khi chưa có nhóm"]
+    H --> I["search_gifts theo ngân sách"]
+    I --> J["check_gift_stock"]
+    J --> K{"Còn hàng?"}
+    K -- "Có" --> L["Final Answer có bằng chứng"]
+    K -- "Không" --> M["Kiểm tra món khác trong kết quả"]
+    M --> J
+    G --> N{"Lỗi, lặp hoặc quá MAX_ITERATIONS?"}
+    N -- "Có" --> O["Guardrail: safe fallback"]
+    C --> P["Lưu hội thoại"]
+    F --> P
+    L --> P
+    O --> P

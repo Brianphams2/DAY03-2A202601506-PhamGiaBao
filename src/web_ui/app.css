@@ -368,6 +368,14 @@ pre {
   color: var(--danger);
 }
 
+.thought-panel pre {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: #42534d;
+  font-size: 13px;
+}
+
 .composer {
   position: sticky;
   bottom: 0;

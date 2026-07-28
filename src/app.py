@@ -8,6 +8,7 @@ import json
 import os
 import re
 import sys
+import unicodedata
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,6 +82,15 @@ FINAL_PATTERN = re.compile(r"Final Answer:\s*(.+)", re.IGNORECASE | re.DOTALL)
 CATEGORY_PATTERN = re.compile(r"Nhóm tính cách:\s*(Tri thức|Công nghệ|Thể thao)")
 GIFT_PATTERN = re.compile(r"^'([^']+)'.*:\s*CÒN HÀNG", re.DOTALL)
 SEARCH_GIFT_PATTERN = re.compile(r"(?m)^\d+\.\s+(.+?)\s+-\s+[\d,]+\s+VNĐ$")
+
+
+def _fold_text(value: str) -> str:
+    """Lowercase Vietnamese text into ASCII-ish tokens for stable intent checks."""
+    text = str(value).lower().replace("đ", "d")
+    normalized = unicodedata.normalize("NFD", text)
+    return "".join(
+        char for char in normalized if unicodedata.category(char) != "Mn"
+    )
 
 
 def load_test_cases() -> list[dict[str, Any]]:
@@ -221,25 +231,27 @@ class GiftAdvisorAgent:
 
     @staticmethod
     def _extract_budget(user_query: str) -> int | str | None:
-        text = user_query.lower()
-        million_match = re.search(r"(\d+(?:[,.]\d+)?)\s*triệu", text)
+        text = _fold_text(user_query)
+        million_match = re.search(r"(\d+(?:[,.]\d+)?)\s*trieu", text)
         if million_match:
             return int(float(million_match.group(1).replace(",", ".")) * 1_000_000)
         money_matches = re.findall(
-            r"(?<!\d)(\d{1,3}(?:[.,]\d{3})+|\d{5,})(?:\s*(?:vnđ|vnd|đ))?",
+            r"(?<!\d)(\d{1,3}(?:[.,]\d{3})+|\d{5,})(?:\s*(?:vnd|vn d|d))?",
             text,
         )
         if money_matches:
             return int(money_matches[-1].replace(".", "").replace(",", ""))
-        if "ngân sách" in text and "rất nhiều tiền" in text:
-            return "rất nhiều tiền"
+        if "ngan sach" in text and (
+            "rat nhieu" in text or "nhieu tien" in text or "khong gioi han" in text
+        ):
+            return "invalid_non_numeric_budget"
         return None
 
     @staticmethod
     def _explicit_category(user_query: str) -> str | None:
-        text = user_query.lower()
+        text = _fold_text(user_query)
         return next(
-            (category for category in GIFT_CATALOG if category.lower() in text),
+            (category for category in GIFT_CATALOG if _fold_text(category) in text),
             None,
         )
 
@@ -265,6 +277,32 @@ class GiftAdvisorAgent:
                 return SEARCH_GIFT_PATTERN.findall(observation)
         return []
 
+    @staticmethod
+    def _memory_budget_reuse_requested(user_query: str) -> bool:
+        text = _fold_text(user_query)
+        markers = (
+            "dung ngan sach cu",
+            "ngan sach cu",
+            "ngan sach lan truoc",
+            "nhu lan truoc",
+            "nhu cu",
+            "lan truoc",
+            "da luu",
+            "previous budget",
+            "same budget",
+            "old budget",
+        )
+        return any(marker in text for marker in markers)
+
+    @staticmethod
+    def _has_personality_signal(user_query: str) -> bool:
+        text = _fold_text(user_query)
+        return any(
+            _fold_text(keyword) in text
+            for keywords in PERSONALITY_KEYWORDS.values()
+            for keyword in keywords
+        )
+
     def _next_safe_action(
         self,
         user_query: str,
@@ -273,23 +311,23 @@ class GiftAdvisorAgent:
     ) -> ParsedAction | None:
         """Recover a rubric-compliant tool path when the model breaks protocol."""
         executed_names = [action.name for action, _ in observations]
-        text = user_query.lower()
-        if any(marker in text for marker in ("lần trước", "còn nhớ", "đã lưu")):
-            return None
-        if "tại sao" in text and self._extract_budget(user_query) is None:
+        text = _fold_text(user_query)
+        explicit_budget = self._extract_budget(user_query)
+        reuse_memory_budget = self._memory_budget_reuse_requested(user_query)
+        if "tai sao" in text and explicit_budget is None:
             return None
         category = (
             self._category_from_observations(observations)
             or self._explicit_category(user_query)
-            or profile.get("category")
+            or (
+                profile.get("category")
+                if explicit_budget is not None or reuse_memory_budget
+                else None
+            )
         )
 
-        has_personality_signal = any(
-            keyword in text
-            for keywords in PERSONALITY_KEYWORDS.values()
-            for keyword in keywords
-        )
-        asks_for_analysis = "phân tích" in text or "tính cách" in text
+        has_personality_signal = self._has_personality_signal(user_query)
+        asks_for_analysis = "phan tich" in text or "tinh cach" in text
         if (
             not category
             and "analyze_personality" not in executed_names
@@ -301,8 +339,8 @@ class GiftAdvisorAgent:
                 raw=f"analyze_personality[{user_query!r}]",
             )
 
-        budget = self._extract_budget(user_query)
-        if budget is None:
+        budget = explicit_budget
+        if budget is None and reuse_memory_budget:
             budget = profile.get("budget_vnd")
         if category and budget is not None and "search_gifts" not in executed_names:
             return ParsedAction(
@@ -321,7 +359,7 @@ class GiftAdvisorAgent:
             if action.name == "check_gift_stock" and action.args
         ]
         available_checked = any(
-            action.name == "check_gift_stock" and "CÒN HÀNG" in observation
+            action.name == "check_gift_stock" and "con hang" in _fold_text(observation)
             for action, observation in observations
         )
         if available_checked:
@@ -330,7 +368,7 @@ class GiftAdvisorAgent:
         # Prefer a gift explicitly requested by the user, otherwise the last
         # (highest-priced) catalog result that is still within budget.
         explicit_gift = next(
-            (gift for gift in gifts if gift.lower() in text and gift not in checked),
+            (gift for gift in gifts if _fold_text(gift) in text and gift not in checked),
             None,
         )
         candidate = explicit_gift or next(
@@ -385,6 +423,197 @@ class GiftAdvisorAgent:
             if action.name == "check_gift_stock" and observation.startswith("LỖI:"):
                 return f"{observation}\n\nVui lòng chọn một tên quà có trong danh mục."
         return None
+
+    @staticmethod
+    def _catalog_names(category_fold: str | None = None) -> list[str]:
+        names: list[str] = []
+        for category, gifts in GIFT_CATALOG.items():
+            if category_fold is not None and _fold_text(category) != category_fold:
+                continue
+            names.extend(name for name, _, _ in gifts)
+        return names
+
+    @classmethod
+    def _mentions_out_of_catalog_product(cls, user_query: str) -> bool:
+        text = _fold_text(user_query)
+        if any(_fold_text(name) in text for name in cls._catalog_names()):
+            return False
+        unsupported_terms = (
+            "pc",
+            "laptop",
+            "may tram",
+            "workstation",
+            "dien thoai",
+            "tablet",
+            "flagship",
+            "smart home",
+            "camera",
+            "quay phim",
+            "startup",
+            "xe dien",
+            "gaming setup",
+            "ai tools",
+            "may tinh ai",
+        )
+        return any(term in text for term in unsupported_terms)
+
+    @staticmethod
+    def _has_successful_search(
+        observations: list[tuple[ParsedAction, str]],
+    ) -> bool:
+        return any(
+            action.name == "search_gifts" and not observation.startswith("LỖI:")
+            for action, observation in observations
+        )
+
+    @staticmethod
+    def _grounded_stock_answer(
+        observations: list[tuple[ParsedAction, str]],
+    ) -> str | None:
+        for action, observation in reversed(observations):
+            if action.name != "check_gift_stock":
+                continue
+            if "con hang" not in _fold_text(observation):
+                continue
+            gift_name = str(action.args[0]) if action.args else "món quà này"
+            match = re.match(r"^'([^']+)'", observation)
+            if match:
+                gift_name = match.group(1)
+            return (
+                f"Mình đề xuất '{gift_name}'.\n\n"
+                f"Tool local đã xác nhận: {observation}\n\n"
+                "Mình chỉ tư vấn dựa trên danh mục local, không tạo đơn hàng hoặc thanh toán."
+            )
+        return None
+
+    def _grounding_guard_answer(
+        self,
+        user_query: str,
+        proposed_answer: str,
+        profile: dict[str, Any],
+        observations: list[tuple[ParsedAction, str]],
+    ) -> str | None:
+        """Block answers that infer budget or product inventory without tools."""
+        budget = self._extract_budget(user_query)
+        reuse_memory_budget = self._memory_budget_reuse_requested(user_query)
+        has_category_signal = bool(
+            self._explicit_category(user_query)
+            or self._has_personality_signal(user_query)
+            or (reuse_memory_budget and profile.get("category"))
+        )
+
+        if self._mentions_out_of_catalog_product(user_query):
+            tech_names = "; ".join(self._catalog_names("cong nghe"))
+            return (
+                "Mình không có PC/laptop/flagship trong danh mục local của bài lab, "
+                "nên không thể lập danh sách hoặc tư vấn các sản phẩm đó.\n\n"
+                f"Nhóm Công nghệ trong DB hiện chỉ có: {tech_names}.\n\n"
+                "Nếu bạn muốn mình chọn quà trong DB, hãy nhập ngân sách cụ thể bằng số VNĐ "
+                "(ví dụ 500000 hoặc 1 triệu)."
+            )
+
+        if isinstance(budget, str):
+            return (
+                "Ngân sách cần là số VNĐ cụ thể, ví dụ 500000 hoặc 1 triệu. "
+                "Mình không quy đổi các mô tả như 'rất nhiều' thành ngân sách để tránh "
+                "đề xuất sai danh mục."
+            )
+
+        if has_category_signal and budget is None and not reuse_memory_budget:
+            remembered_budget = profile.get("budget_vnd")
+            memory_note = (
+                f"\n\nMình có thấy memory cũ {remembered_budget:,} VNĐ, nhưng đây là "
+                "yêu cầu mới nên mình sẽ không tự dùng lại nếu bạn chưa nói rõ."
+                if isinstance(remembered_budget, int)
+                else ""
+            )
+            return (
+                "Mình chưa có ngân sách cụ thể cho yêu cầu mới này. "
+                "Vui lòng nhập ngân sách bằng số VNĐ, ví dụ 500000 hoặc 1 triệu, "
+                "để mình tra đúng danh mục local trước khi đề xuất."
+                f"{memory_note}"
+            )
+
+        answer_text = _fold_text(proposed_answer)
+        recommendation_markers = (
+            "de xuat",
+            "goi y",
+            "nen chon",
+            "nen mua",
+            "san pham",
+            "mon qua",
+            "pc",
+            "laptop",
+            "flagship",
+        )
+        if (
+            has_category_signal
+            and not self._has_successful_search(observations)
+            and any(marker in answer_text for marker in recommendation_markers)
+        ):
+            return (
+                "Mình chưa thể đề xuất sản phẩm khi chưa tra danh mục local bằng tool. "
+                "Hãy nhập đủ sở thích và ngân sách số VNĐ; mình sẽ chạy đúng luồng "
+                "analyze_personality -> search_gifts -> check_gift_stock."
+            )
+
+        return None
+
+    def _return_guardrail_answer(
+        self,
+        session_id: str,
+        answer: str,
+        trace: list[str],
+        tool_calls: list[ParsedAction],
+        iteration: int,
+        reason: str,
+    ) -> AgentResult:
+        trace.append(f"Guardrail: {reason}")
+        trace.append(f"Final Answer: {answer}")
+        self.memory.add_message(
+            session_id,
+            "assistant",
+            answer,
+            {
+                "guardrail": True,
+                "iterations": iteration,
+                "tool_calls": [item.raw for item in tool_calls],
+            },
+        )
+        return AgentResult(
+            answer=answer,
+            trace=trace,
+            tool_calls=tool_calls,
+            iterations=iteration,
+            guardrail_triggered=True,
+        )
+
+    def _return_grounded_answer(
+        self,
+        session_id: str,
+        answer: str,
+        trace: list[str],
+        tool_calls: list[ParsedAction],
+        iteration: int,
+    ) -> AgentResult:
+        trace.append("Observation: Final answer được chuẩn hóa từ check_gift_stock.")
+        trace.append(f"Final Answer: {answer}")
+        self.memory.add_message(
+            session_id,
+            "assistant",
+            answer,
+            {
+                "iterations": iteration,
+                "tool_calls": [item.raw for item in tool_calls],
+                "grounded_final": True,
+            },
+        )
+        return AgentResult(
+            answer=answer,
+            trace=trace,
+            tool_calls=tool_calls,
+            iterations=iteration,
+        )
 
     @staticmethod
     def _enforce_advisory_scope(answer: str) -> str:
@@ -523,6 +752,27 @@ Hãy tạo đúng bước kế tiếp theo định dạng trong system prompt.""
                     parse_error = None
                     recovered_action = True
                 else:
+                    grounded_answer = self._grounded_stock_answer(observations)
+                    if grounded_answer:
+                        return self._return_grounded_answer(
+                            session_id,
+                            grounded_answer,
+                            trace,
+                            tool_calls,
+                            iteration,
+                        )
+                    guardrail_answer = self._grounding_guard_answer(
+                        query, final_answer, profile, observations
+                    )
+                    if guardrail_answer:
+                        return self._return_guardrail_answer(
+                            session_id,
+                            guardrail_answer,
+                            trace,
+                            tool_calls,
+                            iteration,
+                            "Chặn Final Answer chưa được grounding hoặc đang suy diễn ngoài DB.",
+                        )
                     final_answer = self._enforce_advisory_scope(final_answer)
                     self.memory.add_message(
                         session_id,
@@ -623,6 +873,27 @@ Hãy tạo đúng bước kế tiếp theo định dạng trong system prompt.""
             if action is None and not parse_error and output:
                 # If no tool is missing, a free-form response can safely become
                 # the final answer while the trace still records the normalization.
+                grounded_answer = self._grounded_stock_answer(observations)
+                if grounded_answer:
+                    return self._return_grounded_answer(
+                        session_id,
+                        grounded_answer,
+                        trace,
+                        tool_calls,
+                        iteration,
+                    )
+                guardrail_answer = self._grounding_guard_answer(
+                    query, output, profile, observations
+                )
+                if guardrail_answer:
+                    return self._return_guardrail_answer(
+                        session_id,
+                        guardrail_answer,
+                        trace,
+                        tool_calls,
+                        iteration,
+                        "Chặn free-form answer chưa được grounding hoặc đang suy diễn ngoài DB.",
+                    )
                 final_answer = self._enforce_advisory_scope(output)
                 trace.append(f"Final Answer: {final_answer}")
                 self.memory.add_message(

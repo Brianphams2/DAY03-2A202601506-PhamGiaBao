@@ -25,8 +25,8 @@ const elements = {
 };
 
 function createSessionId() {
-  if (crypto.randomUUID) {
-    return `web-${crypto.randomUUID()}`;
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return `web-${globalThis.crypto.randomUUID()}`;
   }
   return `web-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

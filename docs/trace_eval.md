@@ -7,11 +7,11 @@
 
 | Tiêu chí | Điểm (1-5) | Lý do đánh giá |
 | :--- | :---: | :--- |
-| 🧠 **Multi-step Reasoning** | `4/5` | Cần suy luận từ tra cứu thời tiết đến chọn trang phục. |
-| 🛠️ **Tool Interaction** | `5/5` | Cần tra cứu dữ liệu thời gian thực qua API thời tiết/chuyến bay. |
-| 🔀 **Dynamic Decision** | `4/5` | Kết quả bước trước quyết định hành động bước sau. |
-| ⏳ **Long Horizon** | `3/5` | Quy trình gồm 2-3 bước xử lý ngắn. |
-| **TỔNG ĐIỂM FIT** | **16/20** | **KẾT LUẬN: BÀI TOÁN RẤT NÊN DÙNG REACT AGENT!** |
+| 🧠 **Multi-step Reasoning** | `4/5` | Việc chọn quà cần thực hiện với nhiều lần suy luận. Agent cần căn cứ vào nhiều tiêu chí như sinh nhật, sở thích, ngân sách, handmade, ... trước khi đưa ra đề xuất cuối cùng. |
+| 🛠️ **Tool Interaction** | `3/5` | Agent cần tương tác với các công cụ bên ngoài như API của các sàn thương mại điện tử (Shopee, Tiki, Lazada, ...), định vị (Google Maps), thời gian (Calendar). Tuy nhiên, mức độ áp dụng của chúng so với các bài toán nghiệp vụ khác là chưa quá cao. |
+| 🔀 **Dynamic Decision** | `4/5` | Mỗi thông tin thu được sẽ làm thay đổi hướng giải quyết vấn đề của agent. Ví dụ, sau khi xác định được ngân sách thấp, các sản phẩm cao cấp sẽ bị lược bỏ, thời gian hỏa tốc thì cần đơn hàng có hỗ trợ giao trong thời gian ngắn hạn. |
+| ⏳ **Long Horizon** | `3/5` | Quá trình lựa chọn quà có thể yêu cầu agent thực hiện nhiều vòng tìm kiếm và đánh giá trên các cửa hàng khác nhau. Agent cần lặp lại việc tìm kiếm, so sánh, loại bỏ các lựa chọn không phù hợp (hếxt hàng, vượt ngân sách, giao chậm,...) trước khi đưa ra đề xuất cuối cùng.  |
+| **TỔNG ĐIỂM FIT** | **14/20** | **KẾT LUẬN: Bài toán phù hợp để áp dụng ReAct Agent, đặc biệt ở hai tiêu chí Multi-step Reasoning và Dynamic Decision.** |
 
 ---
 

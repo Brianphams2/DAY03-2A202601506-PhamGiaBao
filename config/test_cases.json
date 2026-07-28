@@ -2,31 +2,49 @@
   {
     "id": 1,
     "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Thủ đô của Việt Nam là gì?",
-    "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
+    "question": "Tại sao việc chọn quà tặng phù hợp với tính cách và sở thích của người nhận lại quan trọng?",
+    "expected_behavior": "Chatbot / Agent trả lời trực tiếp từ kiến thức có sẵn mà không cần gọi Tool."
   },
   {
     "id": 2,
-    "category": "🟢 Đơn giản (Chỉ cần LLM)",
-    "question": "Nêu 3 lời khuyên để học tốt lập trình.",
-    "expected_behavior": "Chatbot trả lời trực tiếp từ kiến thức có sẵn."
+    "category": "🟢 Đơn giản (Cần gọi 1 Tool)",
+    "question": "Bạn tôi là người trầm tính, rất thích đọc sách và học hỏi. Hãy phân tích giúp tôi người này thuộc nhóm tính cách nào?",
+    "expected_behavior": "Agent gọi tool analyze_personality('hướng nội, thích đọc sách, trầm tính') và trả về kết quả thuộc nhóm 'Tri thức'."
   },
   {
     "id": 3,
-    "category": "🟡 Multi-step (Cần Tool)",
-    "question": "Thời tiết ở Hà Nội hôm nay thế nào và tôi nên mặc gì đi chơi?",
-    "expected_behavior": "Agent gọi tool get_weather('Hà Nội') rồi suy luận trang phục."
+    "category": "🟡 Multi-step (Cần gọi 2 Tools)",
+    "question": "Tôi muốn tặng quà cho bạn thân thích tập gym và chạy bộ, ngân sách của tôi là 500.000 VNĐ. Hãy tư vấn món quà phù hợp.",
+    "expected_behavior": "Agent gọi analyze_personality('tập gym, chạy bộ') -> xác định nhóm 'Thể thao', sau đó gọi search_gifts('Thể thao', 500000) và đưa ra danh sách các món quà trong ngân sách."
   },
   {
     "id": 4,
-    "category": "🟡 Multi-step (Cần gọi 2 Tools)",
-    "question": "Kiểm tra vé máy bay từ TP.HCM đi Hà Nội ngày mai và dự báo thời tiết ở Hà Nội.",
-    "expected_behavior": "Agent gọi tool search_flights và get_weather để trả lời đầy đủ."
+    "category": "🟡 Multi-step (Cần gọi 3 Tools - Đầy đủ quy trình)",
+    "question": "Tôi muốn tìm quà cho đồng nghiệp làm lập trình viên thích chơi game với ngân sách 1.000.000 VNĐ. Hãy tìm món quà phù hợp và kiểm tra tồn kho trước khi chốt tư vấn.",
+    "expected_behavior": "Agent gọi analyze_personality('lập trình viên, chơi game') -> nhóm 'Công nghệ', gọi search_gifts('Công nghệ', 1000000) -> lọc danh sách quà, sau đó gọi check_gift_stock cho quà được chọn để xác nhận còn hàng trước khi đưa ra câu trả lời cuối cùng."
   },
   {
     "id": 5,
-    "category": "🔴 Edge Case (Bẫy Guardrail)",
-    "question": "Tra cứu thời tiết ở thành phố Atlantis ngày 32/13/2026.",
-    "expected_behavior": "Tool báo lỗi tham số/thất bại, Guardrail ngắt sau 3 bước và trả về thông báo lịch sự."
+    "category": "🔴 Edge Case (Bẫy Quà Hết Hàng)",
+    "question": "Tôi muốn tặng món quà công nghệ cao cấp khoảng 1.200.000 VNĐ là Tai nghe Bluetooth chống ồn cho bạn mê code. Hãy kiểm tra và chốt mua giúp tôi.",
+    "expected_behavior": "Agent gọi search_gifts('Công nghệ', 1200000) và check_gift_stock('Tai nghe Bluetooth chống ồn'). Tool trả về status 'HẾT HÀNG'. Agent nhận biết sản phẩm hết hàng và chủ động chuyển hướng gợi ý món quà khác còn hàng trong cùng nhóm (như Bàn phím cơ mini RGB)."
+  },
+  {
+    "id": 6,
+    "category": "🔴 Edge Case (Bẫy Ngân Sách Quá Thấp)",
+    "question": "Tôi muốn mua quà thuộc nhóm Tri thức cho bạn mê đọc sách nhưng ngân sách chỉ có 100.000 VNĐ.",
+    "expected_behavior": "Agent gọi search_gifts('Tri thức', 100000). Tool phản hồi không có quà trong tầm giá và gợi ý món rẻ nhất là 350.000 VNĐ. Agent tiếp nhận thông tin từ tool và giải thích lịch sự, khuyên người dùng nâng ngân sách lên tối thiểu 350.000 VNĐ."
+  },
+  {
+    "id": 7,
+    "category": "🔴 Edge Case (Bẫy Tính Cách Không Có Trong Danh Mục)",
+    "question": "Bạn tôi có sở thích kỳ lạ là sưu tầm thiên thạch và ngắm sao. Hãy phân tích tính cách và chọn quà phù hợp.",
+    "expected_behavior": "Agent gọi analyze_personality('sưu tầm thiên thạch, ngắm sao'). Tool trả về 'LỖI: Không nhận diện được nhóm tính cách...'. Agent xử lý chuỗi LỖI an toàn, không bị crash, và giải thích cho người dùng về 3 nhóm tính cách hợp lệ hiện có (Tri thức, Công nghệ, Thể thao)."
+  },
+  {
+    "id": 8,
+    "category": "🔴 Edge Case (Bẫy Ngân Sách Sai Định Dạng)",
+    "question": "Hãy tìm cho tôi món quà thuộc nhóm Thể thao với ngân sách 'rất nhiều tiền'.",
+    "expected_behavior": "Agent gọi search_gifts('Thể thao', 'rất nhiều tiền'). Tool trả về 'LỖI: Ngân sách... không phải số'. Agent bắt được thông báo lỗi từ tool và phản hồi lại người dùng một cách rõ ràng, yêu cầu nhập số tiền cụ thể."
   }
 ]

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gift Advisor</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <aside class="sidebar" aria-label="Điều hướng">
+        <div class="brand">
+          <span class="brand-mark">G</span>
+          <span>Gift Advisor</span>
+        </div>
+
+        <button id="newChatButton" class="new-chat-button" type="button">+ New chat</button>
+
+        <nav class="tabs" aria-label="Màn hình">
+          <button class="tab is-active" type="button" data-screen="chat">Chat</button>
+          <button class="tab" type="button" data-screen="logs">Logs</button>
+        </nav>
+
+        <p id="statusText" class="status">Sẵn sàng</p>
+      </aside>
+
+      <section class="workspace">
+        <section id="chatScreen" class="screen is-active" aria-label="Chat">
+          <header class="topbar">
+            <button class="mobile-brand" type="button" data-screen="chat">Gift Advisor</button>
+            <label class="trace-toggle">
+              <input id="traceToggle" type="checkbox" checked />
+              <span>Thought</span>
+            </label>
+          </header>
+
+          <div class="chat-frame">
+            <div id="emptyChat" class="empty-chat">
+              <h1>Hôm nay chọn quà gì?</h1>
+              <p>Nhập sở thích, ngân sách và mình sẽ chạy agent để đề xuất món phù hợp.</p>
+              <div class="suggestions">
+                <button type="button" data-suggestion="Bạn mình thích công nghệ, ngân sách 1 triệu">
+                  Bạn mình thích công nghệ, ngân sách 1 triệu
+                </button>
+                <button type="button" data-suggestion="Người nhận thích đọc sách và ghi chú, ngân sách 500000">
+                  Thích đọc sách, ngân sách 500000
+                </button>
+              </div>
+            </div>
+
+            <div id="messageList" class="message-list" aria-live="polite"></div>
+          </div>
+
+          <form id="chatForm" class="composer">
+            <textarea
+              id="messageInput"
+              rows="1"
+              placeholder="Nhắn tin cho Gift Advisor"
+              required
+            ></textarea>
+            <button id="sendButton" type="submit" aria-label="Gửi">Gửi</button>
+          </form>
+        </section>
+
+        <section id="logsScreen" class="screen" aria-label="Logs">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">Logs</p>
+              <h2>Theo dõi lượt chạy</h2>
+            </div>
+            <button id="refreshLogsButton" class="secondary" type="button">Làm mới</button>
+          </header>
+
+          <div class="log-layout">
+            <div id="logFileList" class="log-files"></div>
+            <div id="logEntryList" class="log-entries">
+              <div class="empty-state">Chọn một file log để xem nội dung.</div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>

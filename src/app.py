@@ -11,7 +11,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from dotenv import load_dotenv
 
@@ -55,6 +55,23 @@ class AgentResult:
     tool_calls: list[ParsedAction] = field(default_factory=list)
     iterations: int = 0
     guardrail_triggered: bool = False
+
+
+class _TraceRecorder(list[str]):
+    """List-like trace store that can notify a UI stream as lines arrive."""
+
+    def __init__(self, callback: Callable[[str], None] | None = None):
+        super().__init__()
+        self._callback = callback
+
+    def append(self, item: str) -> None:
+        super().append(item)
+        if self._callback:
+            self._callback(item)
+
+    def extend(self, items) -> None:
+        for item in items:
+            self.append(item)
 
 
 ACTION_PATTERN = re.compile(
@@ -423,7 +440,13 @@ Hãy tạo đúng bước kế tiếp theo định dạng trong system prompt.""
             "sở thích và ngân sách cụ thể bằng VNĐ."
         )
 
-    def run(self, user_query: str, session_id: str = "default") -> AgentResult:
+    def run(
+        self,
+        user_query: str,
+        session_id: str = "default",
+        *,
+        on_trace: Callable[[str], None] | None = None,
+    ) -> AgentResult:
         """Run a complete bounded ReAct loop and persist the conversation."""
         query = str(user_query).strip()
         if not query:
@@ -437,7 +460,7 @@ Hãy tạo đúng bước kế tiếp theo định dạng trong system prompt.""
         self.memory.add_message(session_id, "user", query)
 
         scratchpad: list[str] = []
-        trace: list[str] = []
+        trace: list[str] = _TraceRecorder(on_trace)
         tool_calls: list[ParsedAction] = []
         observations: list[tuple[ParsedAction, str]] = []
         action_counts: dict[tuple[str, str], int] = {}
